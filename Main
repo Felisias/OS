@@ -1,0 +1,160 @@
+#include <iostream>
+#include <fstream>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <string.h>
+
+using namespace std;
+
+void help() {
+  cout << "Программа для работы с файлами." << endl;
+  cout << "Использование:" << endl;
+  cout << "  ./lab2 [команда] [опции] [аргументы]" << endl;
+  cout << endl;
+  cout << "Команды:" << endl;
+  cout << "  -c, --copy   Копировать файл" << endl;
+  cout << "  -m, --move   Переместить файл" << endl;
+  cout << "  -i, --info   Получить информацию о файле" << endl;
+  cout << "  -p, --chmod  Изменить права на файл" << endl;
+  cout << "  -h, --help   Отобразить this help" << endl;
+  cout << endl;
+  cout << "Опции:" << endl;
+  cout << "  -f, --force  При копировании/перемещении перезаписать существующий файл" << endl;
+  cout << endl;
+  cout << "Аргументы:" << endl;
+  cout << "  [имя_файла]  Имя файла для операции" << endl;
+  cout << "  [новое_имя]  Новое имя файла (при перемещении/копировании)" << endl;
+  cout << "  [права]      Права доступа (при chmod) в виде octal-числа" << endl;
+}
+
+bool copyFile(const string& source, const string& dest, bool force) {
+  ifstream in(source, ios::binary);
+  if (!in.is_open()) {
+    cerr << "Ошибка открытия файла " << source << endl;
+    return false;
+  }
+
+  ofstream out(dest, ios::binary | (force ? ios::trunc : ios::out));
+  if (!out.is_open()) {
+    cerr << "Ошибка открытия файла " << dest << endl;
+    return false;
+  }
+
+  char buffer[4096];
+  size_t bytesRead;
+  while ((bytesRead = in.read(buffer, sizeof(buffer)).gcount()) > 0) {
+    out.write(buffer, bytesRead);
+  }
+
+  in.close();
+  out.close();
+
+  return true;
+}
+
+bool moveFile(const string& source, const string& dest, bool force) {
+  if (copyFile(source, dest, force)) {
+    if (remove(source.c_str()) != 0) {
+      cerr << "Ошибка удаления файла " << source << endl;
+      return false;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+void printFileInfo(const string& filename) {
+  struct stat st;
+  if (stat(filename.c_str(), &st) != 0) {
+    cerr << "Ошибка получения информации о файле " << filename << endl;
+    return;
+  }
+
+  cout << "Имя файла: " << filename << endl;
+  cout << "Размер: " << st.st_size << " байт" << endl;
+  cout << "Права: " << oct << st.st_mode << endl;
+  cout << "Время изменения: " << ctime(&st.st_mtime);
+}
+
+bool chmodFile(const string& filename, const string& permissions) {
+  mode_t mode = 0;
+  for (char c : permissions) {
+    mode = (mode << 3) | (c - '0');
+  }
+
+  if (chmod(filename.c_str(), mode) != 0) {
+    cerr << "Ошибка изменения прав доступа к файлу " << filename << endl;
+    return false;
+  }
+
+  return true;
+}
+
+int main(int argc, char* argv[]) {
+  if (argc < 2) {
+    help();
+    return 1;
+  }
+
+  string command = argv[1];
+
+  if (command == "-c" || command == "--copy") {
+    if (argc < 4) {
+      cerr << "Недостаточно аргументов для команды " << command << endl;
+      return 1;
+    }
+
+    string source = argv[2];
+    string dest = argv[3];
+     bool force = false;
+
+    if (argc >= 5 && (string(argv[4]) == "-f" || string(argv[4]) == "--force")) {
+      force = true;
+    }
+
+    return copyFile(source, dest, force) ? 0 : 1;
+  } else if (command == "-m" || command == "--move") {
+    if (argc < 4) {
+      cerr << "Недостаточно аргументов для команды " << command << endl;
+      return 1;
+    }
+
+    string source = argv[2];
+    string dest = argv[3];
+    bool force = false;
+
+    if (argc >= 5 && (string(argv[4]) == "-f" || string(argv[4]) == "--force")) {
+      force = true;
+    }
+
+    return moveFile(source, dest, force) ? 0 : 1;
+  } else if (command == "-i" || command == "--info") {
+    if (argc < 3) {
+      cerr << "Недостаточно аргументов для команды " << command << endl;
+      return 1;
+    }
+
+    string filename = argv[2];
+    printFileInfo(filename);
+
+    return 0;
+  } else if (command == "-p" || command == "--chmod") {
+    if (argc < 4) {
+      cerr << "Недостаточно аргументов для команды " << command << endl;
+      return 1;
+    }
+
+    string filename = argv[2];
+    string permissions = argv[3];
+    return chmodFile(filename, permissions) ? 0 : 1;
+  } else if (command == "-h" || command == "--help") {
+    help();
+    return 0;
+  } else {
+    cerr << "Неизвестная команда: " << command << endl;
+    return 1;
+  }
+
+  return 0;
+}
